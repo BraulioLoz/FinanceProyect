@@ -47,3 +47,5 @@ checkpoint*/
 
 # Reports (capturas y CSVs — agregar manualmente lo que se quiera versionar)
 reports/
+!reports/TEMPLATE_comparison.md
+!reports/.gitkeep
