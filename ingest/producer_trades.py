@@ -58,7 +58,12 @@ def _on_kafka_delivery_report(error: Exception | None, message: Any) -> None:
 
 
 def _create_kafka_producer(kafka_bootstrap_servers: str) -> Producer:
-    return Producer({"bootstrap.servers": kafka_bootstrap_servers})
+    return Producer({
+        "bootstrap.servers": kafka_bootstrap_servers.strip(),
+        "error_cb": lambda error: logger.error(
+            "Error de broker Kafka", extra={"error": str(error)}
+        ),
+    })
 
 
 async def _process_websocket_messages(
@@ -66,10 +71,14 @@ async def _process_websocket_messages(
     kafka_producer: Producer,
     kafka_topic_trades: str,
 ) -> None:
+    message_count = 0
     async for raw_text_frame in websocket_connection:
         outer = json.loads(raw_text_frame)
         # El combined stream envuelve cada mensaje en {"stream": "...", "data": {...}}
         raw_message: dict[str, Any] = outer.get("data", outer)
+        message_count += 1
+        if message_count == 1:
+            logger.info("Primer mensaje WS recibido", extra={"event": raw_message.get("e"), "symbol": raw_message.get("s")})
 
         if raw_message.get("e") != "aggTrade":
             continue
@@ -113,7 +122,7 @@ async def run_trades_producer(
     while True:
         try:
             logger.info(
-                "Conectando a Binance Futures WebSocket (trades)",
+                "Conectando a Binance WebSocket (trades)",
                 extra={"url": websocket_url, "attempt": reconnect_attempt_count},
             )
             connection_start_time = time.monotonic()

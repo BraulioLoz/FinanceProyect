@@ -42,7 +42,7 @@ def _build_depth_update_payload(raw_message: dict[str, Any]) -> dict[str, Any]:
     return {
         "first_update_id": raw_message["U"],
         "final_update_id": raw_message["u"],
-        "previous_final_update_id": raw_message["pu"],
+        "previous_final_update_id": raw_message.get("pu", 0),
         "bids": raw_message["b"],   # [[price_string, qty_string], ...]
         "asks": raw_message["a"],   # [[price_string, qty_string], ...]
     }
@@ -54,7 +54,12 @@ def _on_kafka_delivery_report(error: Exception | None, message: Any) -> None:
 
 
 def _create_kafka_producer(kafka_bootstrap_servers: str) -> Producer:
-    return Producer({"bootstrap.servers": kafka_bootstrap_servers})
+    return Producer({
+        "bootstrap.servers": kafka_bootstrap_servers.strip(),
+        "error_cb": lambda error: logger.error(
+            "Error de broker Kafka", extra={"error": str(error)}
+        ),
+    })
 
 
 async def _process_websocket_messages(
@@ -79,7 +84,7 @@ async def _process_websocket_messages(
             symbol=internal_symbol,
             exchange=EXCHANGE_NAME,
             event_type=EVENT_TYPE_DEPTH_UPDATE,
-            event_timestamp_ms=raw_message["T"],
+            event_timestamp_ms=raw_message.get("T", raw_message["E"]),
             payload=payload,
         )
 
