@@ -165,6 +165,8 @@ def _compute_trade_features(trade_stream: DataFrame, window_duration: str, windo
             F.sum("quantity").alias("total_volume"),
             F.count("*").alias("trade_count"),
             F.avg("price").alias("avg_price"),
+            F.min("price").alias("min_price"),
+            F.max("price").alias("max_price"),
         )
         .select(
             F.col("symbol"),
@@ -175,6 +177,8 @@ def _compute_trade_features(trade_stream: DataFrame, window_duration: str, windo
             F.col("total_volume"),
             F.col("trade_count"),
             F.col("avg_price"),
+            F.col("min_price"),
+            F.col("max_price"),
         )
     )
 
@@ -230,7 +234,7 @@ def _write_batch_to_kafka_and_parquet(
     # Serializar cada fila al envelope JSON
     feature_envelope_udf = F.udf(
         lambda symbol, window_start, vwap, price_volatility, total_volume, trade_count,
-               avg_price, avg_spread_proxy, avg_best_bid_price, avg_best_ask_price: (
+               avg_price, min_price, max_price, avg_spread_proxy, avg_best_bid_price, avg_best_ask_price: (
             _build_feature_envelope(
                 symbol,
                 window_start.isoformat() if window_start else "",
@@ -240,6 +244,8 @@ def _write_batch_to_kafka_and_parquet(
                     "total_volume": total_volume,
                     "trade_count": trade_count,
                     "avg_price": avg_price,
+                    "min_price": min_price,
+                    "max_price": max_price,
                     "avg_spread_proxy": avg_spread_proxy,
                     "avg_best_bid_price": avg_best_bid_price,
                     "avg_best_ask_price": avg_best_ask_price,
@@ -259,6 +265,8 @@ def _write_batch_to_kafka_and_parquet(
             F.col("total_volume"),
             F.col("trade_count"),
             F.col("avg_price"),
+            F.col("min_price"),
+            F.col("max_price"),
             F.col("avg_spread_proxy"),
             F.col("avg_best_bid_price"),
             F.col("avg_best_ask_price"),
@@ -299,15 +307,16 @@ def run_streaming_features(spark: SparkSession) -> None:
     trade_features_df = _compute_trade_features(trade_stream, WINDOW_DURATION, WINDOW_SLIDE)
     book_features_df = _compute_book_features(book_stream, WINDOW_DURATION, WINDOW_SLIDE)
 
-    # Join por símbolo y ventana (stream-stream join con watermark en ambos lados)
+    # Join inner por símbolo y ventana — stream-stream outer join requiere
+    # condición de rango temporal explícita en Spark; inner es correcto aquí
+    # porque ambos streams producen datos para las mismas ventanas.
     combined_features_df = (
         trade_features_df
         .join(
             book_features_df,
             on=["symbol", "window_start"],
-            how="left",
+            how="inner",
         )
-        .fillna(0.0, subset=["avg_spread_proxy", "avg_best_bid_price", "avg_best_ask_price"])
     )
 
     query = (

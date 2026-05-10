@@ -53,6 +53,11 @@ spark-submit \
   --conf "spark.executor.resource.gpu.amount=1" \
   --conf "spark.task.resource.gpu.amount=1" \
   --conf "spark.rapids.sql.concurrentGpuTasks=2" \
+  --conf "spark.sql.session.timeZone=UTC" \
+  --conf "spark.driver.extraJavaOptions=-Duser.timezone=UTC" \
+  --conf "spark.executor.extraJavaOptions=-Duser.timezone=UTC" \
+  --conf "spark.rapids.sql.castStringToTimestamp.enabled=true" \
+  --conf "spark.rapids.sql.hasExtendedYearValues=false" \
   --packages "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.4" \
   --jars "${RAPIDS_JAR_PATH},${CUDF_JAR_PATH}" \
   "${SPARK_JOB_SCRIPT}"

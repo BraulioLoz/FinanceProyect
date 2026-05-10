@@ -257,6 +257,23 @@ class TestComputeTradeFeatures:
         assert "window_start" in result_df.columns
         assert "symbol" in result_df.columns
 
+    def test_min_price_column_present(self, spark: SparkSession) -> None:
+        trade_df = self._make_trade_df(spark)
+        result_df = _compute_trade_features(trade_df, "1 minute", "1 minute")
+        assert "min_price" in result_df.columns
+
+    def test_max_price_column_present(self, spark: SparkSession) -> None:
+        trade_df = self._make_trade_df(spark)
+        result_df = _compute_trade_features(trade_df, "1 minute", "1 minute")
+        assert "max_price" in result_df.columns
+
+    def test_min_max_values_correct(self, spark: SparkSession) -> None:
+        trade_df = self._make_trade_df(spark)
+        result_df = _compute_trade_features(trade_df, "1 minute", "1 minute")
+        btc_row = [r for r in result_df.collect() if r.symbol == "BTCUSDT"][0]
+        assert abs(btc_row.min_price - 42000.0) < 0.001
+        assert abs(btc_row.max_price - 42100.0) < 0.001
+
     def test_vwap_is_weighted_by_quantity(self, spark: SparkSession) -> None:
         # Un solo trade: price=42000, qty=1 → VWAP debe ser 42000
         single_trade_schema = StructType([
