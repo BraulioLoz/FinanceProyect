@@ -29,8 +29,8 @@ Ambas arquitecturas ejecutan el mismo pipeline: ingestión de datos en tiempo re
 | **GPU** | NVIDIA RTX 4070 Laptop 8 GB VRAM | NVIDIA T4 16 GB VRAM |
 | **Disco** | 1 TB NVMe WD SN560 | HDD temporal Colab (~100 GB) |
 | **OS** | Windows 11 + WSL2 Ubuntu (kernel 6.6.114.1) | Ubuntu 22.04 (contenedor Colab) |
-| **PySpark** | 3.5.4 | 3.5.x |
-| **RAPIDS** | 25.02.0 (incompatible con WSL2 kernel) | Pre-instalado (compatible) |
+| **PySpark** | 3.5.4 | 3.5.2 |
+| **RAPIDS** | 25.02.0 (incompatible con WSL2 kernel) | 24.10.1 (instalado manualmente) |
 | **CUDA** | 12.6 (driver Windows 591.86) | 12.x |
 | **Spark mode** | `local[10]` | `local[2]` |
 
@@ -39,13 +39,14 @@ Ambas arquitecturas ejecutan el mismo pipeline: ingestión de datos en tiempo re
 | Parámetro | Arq. 1 — CPU Local | Arq. 2 — Colab GPU |
 |-----------|--------------------|--------------------|
 | `spark.driver.memory` | 8g | 6g |
-| `spark.executor.memory` | 16g | 8g |
+| `spark.executor.memory` | 16g | — (local mode) |
 | `spark.executor.cores` | 10 | 2 |
 | `spark.sql.shuffle.partitions` | 20 | 4 |
-| `spark.rapids.memory.pinnedPool.size` | — | 2g |
-| `spark.executor.resource.gpu.amount` | — | 1 |
-| `spark.task.resource.gpu.amount` | — | 0.5 |
+| `spark.rapids.memory.pinnedPool.size` | — | 0 (estabilidad) |
+| `spark.rapids.memory.gpu.pool` | — | NONE |
+| `spark.rapids.sql.concurrentGpuTasks` | — | 1 |
 | `spark.plugins` | — | `com.nvidia.spark.SQLPlugin` |
+| `spark.serializer` | — | KryoSerializer + GpuKryoRegistrator |
 
 ---
 
@@ -263,12 +264,15 @@ base_features = [
 
 ### 6.4 Batch Training (`batch_train.py`)
 
-| Métrica | Valor |
-|---------|-------|
-| **Tiempo total** | **~8 min** |
-| Accuracy modelo | 46.67% |
-| Shuffle (feature assembly) | ~30 MiB |
-| GC Time | N/D |
+| Métrica | Local (10 cores) | Colab (2 vCPU) |
+|---------|------------------|----------------|
+| **Tiempo total** | **~8 min** | **2,210.6 s (~36.8 min)** |
+| Accuracy modelo | 46.67% | 51.19% |
+| F1-score | N/D | 0.5112 |
+| AUC-ROC | N/D | 0.5224 |
+| Shuffle (feature assembly) | ~30 MiB | N/D |
+
+> **Nota:** La diferencia de tiempo (8 min vs 37 min) se explica por 10 cores locales vs 2 vCPU en Colab. Ambos resultados muestran accuracy cercana al 50% — esperado con datos sintéticos de ruido determinista donde no existe señal predictiva real.
 
 ### 6.5 Streaming Inference (`streaming_inference.py`)
 
@@ -286,31 +290,39 @@ base_features = [
 
 ### 7.1 Notas de configuración para Colab
 
-Para reproducir en Google Colab con T4 GPU, ejecutar en una celda:
+Para reproducir en Google Colab con T4 GPU:
 
 ```python
-# Instalar PySpark y descargar RAPIDS JAR
-!pip install pyspark==3.5.4 -q
-!wget -q https://repo1.maven.org/maven2/com/nvidia/rapids-4-spark_2.12/25.02.0/rapids-4-spark_2.12-25.02.0.jar
+# Instalar PySpark y descargar RAPIDS JAR (24.10.1 — compatible con Spark 3.5.x)
+!pip install pyspark==3.5.2 py4j numpy pandas -q
+!wget -q https://repo1.maven.org/maven2/com/nvidia/rapids-4-spark_2.12/24.10.1/rapids-4-spark_2.12-24.10.1.jar
 
-import os
-os.environ["RAPIDS_JAR"] = "/content/rapids-4-spark_2.12-25.02.0.jar"
+RAPIDS_JAR = "/content/rapids-4-spark_2.12-24.10.1.jar"
+os.environ["PYSPARK_SUBMIT_ARGS"] = f"--driver-class-path {RAPIDS_JAR} --jars {RAPIDS_JAR} pyspark-shell"
 ```
 
-Ver guía completa en `reports/colab_setup.md`.
+**Configuración clave para local mode (evitar deadlock):**
+- NO usar `spark.*.resource.gpu.*` — causa deadlock en scheduler local
+- `spark.rapids.memory.pinnedPool.size=0` y `spark.rapids.memory.gpu.pool=NONE` para estabilidad
+- `spark.rapids.sql.format.parquet.read.enabled=false` — previene hang en lectura
+- `spark.kryo.registrator=com.nvidia.spark.rapids.GpuKryoRegistrator` con Kryo serializer
+
+Ver notebook completo: `colab_benchmark.ipynb` / `colab_benchmark.html`.
 
 ### 7.2 Resultados Arquitectura 2
 
-| Métrica | CPU Local (ref §6) | GPU Colab T4 | Speedup |
+| Métrica | CPU Colab (ref §6) | GPU Colab T4 | Speedup |
 |---------|--------------------|--------------|---------|
-| Smoke Test (970k filas) — tiempo total | 12.3 s | `[PENDIENTE]` | `[PENDIENTE]` |
-| Smoke Test — `groupBy + agg` etapa | `[PENDIENTE]` | `[PENDIENTE]` | `[PENDIENTE]` |
-| Smoke Test — `corr` join etapa | `[PENDIENTE]` | `[PENDIENTE]` | `[PENDIENTE]` |
-| GPU-Util promedio (`nvidia-smi`) | n/a | `[PENDIENTE]` | — |
-| GPU Memory peak | n/a | `[PENDIENTE]` | — |
-| GC Time | `[PENDIENTE]` | `[PENDIENTE]` | — |
+| Smoke Test (9.7M filas) — tiempo total | 46.3 s | 19.8 s | **2.33×** |
+| Smoke Test — `groupBy + agg` etapa | 35.6 s | 10.2 s | 3.49× |
+| Smoke Test — `corr` join etapa | 10.7 s | 9.6 s | 1.11× |
+| GPU-Util promedio (`nvidia-smi`) | n/a | 0% (burst durante operaciones) | — |
+| GPU Memory peak | n/a | 393 MB / 15,360 MB | — |
+| GC Time | N/A | 10,117 ms | — |
+| Shuffle Read (GPU session) | — | 3,584.59 MB | — |
+| Shuffle Write (GPU session) | — | 2,811.79 MB | — |
 
-> Los resultados de referencia esperados basados en benchmarks públicos de T4 + RAPIDS para workloads similares (groupBy masivo, joins, agregaciones estadísticas): **2–4× speedup** sobre CPU para operaciones batch puramente analíticas. Las operaciones stateful de streaming (watermark, state store) **no se aceleran** en ninguna versión de RAPIDS hasta 25.02.
+> **Resultado:** 2.33× speedup total en GPU T4 vs CPU (misma máquina Colab). La aceleración se concentra en la etapa de `groupBy + agg` (3.49×) donde RAPIDS ejecuta `GpuHashAggregate`. La etapa de correlación (join + `corr`) muestra speedup modesto (1.11×) — el cuello de botella es el shuffle entre operaciones, no el cómputo vectorial. Las operaciones stateful de streaming (watermark, state store) **no se aceleran** en ninguna versión de RAPIDS hasta 25.02.
 
 ---
 
@@ -372,7 +384,17 @@ Durante el desarrollo de este proyecto se identificó una incompatibilidad crít
 
 ### Arquitectura 2 — Google Colab GPU
 
-> Capturas pendientes de correr `reports/colab_setup.md`. Se espera ver en Spark UI: stages GPU (`GpuHashAggregate`, `GpuProject`, `GpuColumnarToRow`) y GC Time drásticamente menor al de CPU.
+Los planes de ejecución GPU fueron capturados programáticamente via `explain(True)` en el notebook (`colab_benchmark.ipynb` / `colab_benchmark.html`). Operadores GPU observados en el plan físico:
+
+| Operador GPU | Contexto |
+|--------------|----------|
+| `GpuHashAggregate` | Agregaciones `groupBy` (VWAP, volatilidad, volumen) |
+| `GpuBroadcastHashJoin` | Join de correlación BTC con tabla broadcast |
+| `GpuProject` | Proyecciones de columnas calculadas |
+| `GpuColumnarToRow` / `GpuRowToColumnar` | Conversión formato columnar ↔ fila |
+| `GpuCoalesceBatches` | Compactación de batches para throughput |
+
+La sesión GPU mostró GC Time de 10,117 ms (vs 34 s en streaming CPU local), temperatura T4 de 70°C, y uso de VRAM de 393 MB / 15,360 MB disponibles. La utilización GPU reportada por `nvidia-smi` fue 0% — esto es normal: RAPIDS opera en bursts cortos de alta intensidad entre operaciones de shuffle/CPU, y el muestreo de `nvidia-smi` (1 Hz) no captura los picos.
 
 ---
 
