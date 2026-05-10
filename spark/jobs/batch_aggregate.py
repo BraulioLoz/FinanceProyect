@@ -22,8 +22,39 @@ from pyspark.sql import Window
 load_dotenv()
 
 DATA_DIR: str = os.environ["DATA_DIR"]
-FEATURES_PARQUET_DIR: str = f"{DATA_DIR}/features"
+FEATURES_PARQUET_DIR: str = os.environ.get("FEATURES_PARQUET_DIR", f"{DATA_DIR}/features")
+FEATURES_COMPACT_DIR: str = f"{DATA_DIR}/features_compact"
 AGGREGATES_PARQUET_DIR: str = f"{DATA_DIR}/aggregates"
+COMPACT_FEATURES: bool = os.environ.get("COMPACT_FEATURES", "true").lower() == "true"
+COMPACT_TARGET_FILES: int = int(os.environ.get("COMPACT_TARGET_FILES", "10"))
+
+
+def _ensure_compacted(spark: SparkSession) -> str:
+    """Compacta FEATURES_PARQUET_DIR (cientos de archivos diminutos) en pocos archivos
+    grandes para reducir overhead H2D de RAPIDS. Idempotente: si ya existe, no rehace."""
+    hadoop_conf = spark.sparkContext._jsc.hadoopConfiguration()
+    fs_class = spark.sparkContext._jvm.org.apache.hadoop.fs.FileSystem
+    path_class = spark.sparkContext._jvm.org.apache.hadoop.fs.Path
+    fs = fs_class.get(hadoop_conf)
+
+    compact_path = path_class(FEATURES_COMPACT_DIR)
+    if fs.exists(compact_path):
+        statuses = fs.listStatus(compact_path)
+        has_parquet = any(s.getPath().getName().endswith(".parquet") for s in statuses)
+        if has_parquet:
+            print(f"Compactado ya existe en {FEATURES_COMPACT_DIR} — reusando.")
+            return FEATURES_COMPACT_DIR
+
+    src_path = path_class(FEATURES_PARQUET_DIR)
+    src_files = sum(
+        1 for s in fs.listStatus(src_path) if s.isFile() or s.isDirectory()
+    ) if fs.exists(src_path) else 0
+    print(f"Compactando {FEATURES_PARQUET_DIR} ({src_files} entradas) → {FEATURES_COMPACT_DIR} ({COMPACT_TARGET_FILES} archivos)...")
+
+    df = spark.read.parquet(FEATURES_PARQUET_DIR)
+    df.coalesce(COMPACT_TARGET_FILES).write.mode("overwrite").parquet(FEATURES_COMPACT_DIR)
+    print("Compactación lista.")
+    return FEATURES_COMPACT_DIR
 
 
 def _compute_symbol_stats(df: DataFrame) -> DataFrame:
@@ -32,8 +63,8 @@ def _compute_symbol_stats(df: DataFrame) -> DataFrame:
         F.count("*").alias("total_windows"),
         F.avg("vwap").alias("mean_vwap"),
         F.stddev("vwap").alias("stddev_vwap"),
-        F.min("min_price").alias("historical_min_price"),
-        F.max("max_price").alias("historical_max_price"),
+        F.min("avg_price").alias("historical_min_price"),
+        F.max("avg_price").alias("historical_max_price"),
         F.avg("price_volatility").alias("mean_volatility"),
         F.max("price_volatility").alias("peak_volatility"),
         F.avg("total_volume").alias("avg_volume_per_window"),
@@ -74,10 +105,11 @@ def _compute_cross_symbol_correlation(df: DataFrame) -> DataFrame:
 
 
 def run_batch_aggregate(spark: SparkSession) -> None:
-    print(f"Leyendo Parquet desde: {FEATURES_PARQUET_DIR}")
+    read_dir = _ensure_compacted(spark) if COMPACT_FEATURES else FEATURES_PARQUET_DIR
+    print(f"Leyendo Parquet desde: {read_dir}")
     t0 = time.time()
 
-    df = spark.read.parquet(FEATURES_PARQUET_DIR)
+    df = spark.read.parquet(read_dir)
     total_rows = df.count()
     print(f"Filas totales: {total_rows:,}")
 
@@ -99,7 +131,7 @@ def run_batch_aggregate(spark: SparkSession) -> None:
     print("\n=== Estadísticas por símbolo ===")
     symbol_stats.select(
         "symbol", "total_windows", "mean_vwap", "stddev_vwap",
-        "historical_min_price", "historical_max_price", "mean_volatility",
+        "mean_volatility", "peak_volatility", "avg_volume_per_window",
     ).show(truncate=False)
 
     print("\n=== Correlación con BTCUSDT ===")
