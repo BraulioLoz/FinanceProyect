@@ -34,10 +34,11 @@ checkpoint*/
 # Jupyter
 .ipynb_checkpoints/
 
-# IDEs
+# IDEs / Cursor local
 .vscode/
 .idea/
 *.iml
+.claude/
 
 # Power BI
 *.pbix
