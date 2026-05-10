@@ -5,7 +5,7 @@
 #
 # Variables de entorno requeridas (o configurar en .env):
 #   RAPIDS_JAR_PATH   ruta al jar rapids-4-spark_2.12-<ver>.jar
-#   CUDF_JAR_PATH     ruta al jar cudf-<ver>-cuda12.jar
+#                     (rapids-4-spark 25.02+ ya bundlea cuDF — NO pasar cudf jar aparte)
 #
 # Variables de entorno opcionales:
 #   SPARK_DRIVER_MEMORY            (default: 8g)
@@ -26,7 +26,6 @@ if [[ -f ".env" ]]; then
 fi
 
 RAPIDS_JAR_PATH="${RAPIDS_JAR_PATH:?Definir RAPIDS_JAR_PATH en .env o como variable de entorno}"
-CUDF_JAR_PATH="${CUDF_JAR_PATH:?Definir CUDF_JAR_PATH en .env o como variable de entorno}"
 
 SPARK_DRIVER_MEMORY="${SPARK_DRIVER_MEMORY:-8g}"
 SPARK_EXECUTOR_MEMORY="${SPARK_EXECUTOR_MEMORY:-16g}"
@@ -39,7 +38,6 @@ export PYSPARK_PYTHON=python3.11
 echo "Iniciando Spark (GPU/RAPIDS) — job: ${SPARK_JOB_SCRIPT}"
 echo "  driver.memory=${SPARK_DRIVER_MEMORY}  executor.memory=${SPARK_EXECUTOR_MEMORY}  executor.cores=${SPARK_EXECUTOR_CORES}"
 echo "  RAPIDS JAR: ${RAPIDS_JAR_PATH}"
-echo "  CUDF  JAR: ${CUDF_JAR_PATH}"
 
 spark-submit \
   --master "local[${SPARK_EXECUTOR_CORES}]" \
@@ -50,14 +48,27 @@ spark-submit \
   --conf "spark.ui.port=4040" \
   --conf "spark.plugins=com.nvidia.spark.SQLPlugin" \
   --conf "spark.rapids.memory.pinnedPool.size=${SPARK_RAPIDS_PINNED_POOL_SIZE}" \
+  --conf "spark.rapids.memory.gpu.pool=ARENA" \
   --conf "spark.executor.resource.gpu.amount=1" \
-  --conf "spark.task.resource.gpu.amount=1" \
-  --conf "spark.rapids.sql.concurrentGpuTasks=2" \
+  --conf "spark.task.resource.gpu.amount=0.1" \
+  --conf "spark.rapids.sql.concurrentGpuTasks=4" \
+  --conf "spark.rapids.sql.explain=NOT_ON_GPU" \
+  --conf "spark.rapids.sql.exec.InMemoryTableScanExec=true" \
+  --conf "spark.sql.cache.serializer=com.nvidia.spark.ParquetCachedBatchSerializer" \
+  --conf "spark.rapids.sql.metrics.level=DEBUG" \
+  --conf "spark.rapids.sql.format.parquet.read.enabled=false" \
+  --conf "spark.rapids.sql.batchSizeBytes=52428800" \
+  --conf "spark.sql.files.maxPartitionBytes=33554432" \
+  --conf "spark.sql.files.minPartitionNum=20" \
   --conf "spark.sql.session.timeZone=UTC" \
   --conf "spark.driver.extraJavaOptions=-Duser.timezone=UTC" \
   --conf "spark.executor.extraJavaOptions=-Duser.timezone=UTC" \
+  --conf "spark.sql.adaptive.enabled=false" \
   --conf "spark.rapids.sql.castStringToTimestamp.enabled=true" \
   --conf "spark.rapids.sql.hasExtendedYearValues=false" \
-  --packages "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.4" \
-  --jars "${RAPIDS_JAR_PATH},${CUDF_JAR_PATH}" \
+  --conf "spark.sql.parquet.int96RebaseModeInRead=CORRECTED" \
+  --conf "spark.sql.parquet.datetimeRebaseModeInRead=CORRECTED" \
+  --conf "spark.sql.parquet.int96RebaseModeInWrite=CORRECTED" \
+  --packages "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.2" \
+  --jars "${RAPIDS_JAR_PATH}" \
   "${SPARK_JOB_SCRIPT}"
