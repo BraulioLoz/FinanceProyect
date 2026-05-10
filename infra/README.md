@@ -1,6 +1,8 @@
 # infra/ — Infraestructura Docker + WSL
 
-Única pieza de infraestructura gestionada: **Apache Kafka en modo KRaft** (sin Zookeeper), ejecutado en Docker dentro de WSL2.
+Única pieza de infraestructura gestionada: **Apache Kafka en modo KRaft** (sin Zookeeper), ejecutado en Docker dentro de WSL2. No hay Redis en el stack; mensajería = Kafka.
+
+**Versión imagen:** `confluentinc/cp-kafka:7.6.1` (línea Confluent Platform 7.6.x).
 
 ---
 

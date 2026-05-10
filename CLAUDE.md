@@ -53,9 +53,9 @@
 | Pieza | Elección |
 |-------|----------|
 | Lenguaje | Python **3.11+** (wheels de WSL) |
-| Spark | **3.5.x** — pin: `pyspark==3.5.4` (último parche estable) |
-| Kafka | **Docker KRaft** (sin Zookeeper) — `infra/docker-compose.kafka.yml` |
-| GPU Spark | `rapids-4-spark` compatible con Spark 3.5.x + **CUDA 12.x** en WSL2 |
+| Spark | **3.5.x** — pin CPU/streaming: `pyspark==3.5.4`; jobs **GPU/RAPIDS**: `pyspark==3.5.2` + `rapids-4-spark_2.12-24.10.1` |
+| Kafka | **Docker KRaft** (sin Zookeeper) — `infra/docker-compose.kafka.yml` (`confluentinc/cp-kafka:7.6.1`) |
+| GPU Spark | `rapids-4-spark` **24.10.1** con PySpark **3.5.2** + **CUDA 12.x** en WSL2 (sin Redis en el stack) |
 | Ingesta | `asyncio` + `websockets` → `confluent-kafka` |
 | Fuente de datos | **Binance USDS-Margined Futures WebSocket** — streams `aggTrade` y `depth@100ms` |
 | ML | **Spark MLlib** preferido; justificar cualquier lib extra |
@@ -135,7 +135,7 @@ Los consumers Spark parsean el envelope y usan `ts_event` como campo de watermar
 
 1. Toda agregación temporal usa `window(...) + withWatermark(...)` sobre `ts_event`.
 2. Cada query de streaming tiene su propio `checkpointLocation` único bajo `$SPARK_CHECKPOINT_BASE/<nombre_query>/`.
-3. Comparativa CPU vs GPU: misma versión PySpark, mismos datos (mismo replay), mismos parámetros; solo cambian los archivos `spark/conf/spark-cpu.conf` / `spark/conf/spark-gpu.conf` y los JARs RAPIDS.
+3. Comparativa CPU vs GPU: mismos datos (mismo replay) y mismos parámetros de negocio; solo cambian `spark/conf/spark-cpu.conf` / `spark/conf/spark-gpu.conf`, JARs RAPIDS y, para GPU establecido aquí, **PySpark 3.5.2** frente a **3.5.4** en CPU (parche alineado con RAPIDS 24.10.1).
 4. Métricas a documentar en `reports/<fecha>/<modo>/`: Input Rate, Processing Rate, Batch Duration (p95), cola de batches, Shuffle Read/Write, GC Time, Scheduler Delay, Spill.
 
 ---
@@ -143,12 +143,14 @@ Los consumers Spark parsean el envelope y usan `ts_event` como campo de watermar
 ## Versiones pin
 
 ```
-python       == 3.11.*
-pyspark      == 3.5.4
-kafka-python >= 2.0.0   # o confluent-kafka >= 2.3.0
-websockets   >= 12.0
-rapids-4-spark <ver>    # confirmar build compatible con Spark 3.5.x + CUDA 12.x
-cuda         12.x        # toolkit en WSL (no instalar nvidia-driver-* con apt)
+python          == 3.11.*
+pyspark         == 3.5.4     # CPU / streaming por defecto
+pyspark (GPU)   == 3.5.2     # jobs con RAPIDS Accelerator + rapids-4-spark_2.12-24.10.1
+kafka-python    >= 2.0.0     # o confluent-kafka >= 2.3.0
+websockets      >= 12.0
+rapids-4-spark  24.10.1      # jar rapids-4-spark_2.12-24.10.1.jar; CUDA 12.x en WSL
+kafka (Docker)  cp-kafka 7.6.1
+cuda            12.x         # toolkit en WSL (no instalar nvidia-driver-* con apt)
 ```
 
 ---

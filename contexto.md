@@ -47,9 +47,9 @@ Este documento es la **fuente de verdad** para iniciar un **nuevo repositorio** 
 | Pieza | Elección |
 | ----- | -------- |
 | Lenguaje | Python **3.11+** (recomendado 3.11 en WSL por wheels). |
-| Spark | **3.5.x** (`pyspark==3.5.*`). Pin de referencia: **3.5.4** o último parche estable 3.5.x. |
-| Kafka | **Docker**, **único** servicio en Compose; modo **KRaft** (sin Zookeeper). Archivo típico: `infra/docker-compose.kafka.yml`. |
-| GPU Spark | **rapids-4-spark** compatible con **Spark 3.5.x** + **CUDA 12.x** en WSL (no confundir con el número de CUDA que muestra `nvidia-smi` en Windows). |
+| Spark | **3.5.x** (`pyspark==3.5.*`). Pin CPU / streaming: **3.5.4**. Para jobs **GPU + RAPIDS** usar **3.5.2** (parche anterior estable alineado con `rapids-4-spark_2.12-24.10.1` y dependencias Maven). |
+| Kafka | **Docker**, **único** servicio en Compose; modo **KRaft** (sin Zookeeper). Imagen de referencia: `confluentinc/cp-kafka:7.6.1` (`infra/docker-compose.kafka.yml`). |
+| GPU Spark | **rapids-4-spark 24.10.1** (`rapids-4-spark_2.12-24.10.1.jar`) con **Spark/PySpark 3.5.2** + **CUDA 12.x** en WSL (no confundir con el número de CUDA que muestra `nvidia-smi` en Windows). Este proyecto **no** usa Redis; mensajería = Kafka. |
 | Ingesta | **asyncio** + cliente **WebSocket** (ej. `websockets`) → productor Kafka (`kafka-python` o `confluent-kafka`). Opcional: **FastAPI** solo para **health/metrics** (no es obligatorio para la ingesta). |
 | Estado / secretos | **Sin Postgres** por defecto. **SQLite** opcional para offsets/cursors fuera de Spark si hace falta. API keys de exchange solo si se usa REST privado (no requerido para datos públicos de libro/trades). |
 | Datos locales | Parquet bajo `~/data/crypto/` (WSL); Power BI lee vía `\\wsl$\Ubuntu\home\<usuario>\data\crypto`. |
@@ -136,7 +136,7 @@ Los consumidores Spark deben parsear el envelope y extraer claves temporales par
 
 1. Agregaciones temporales: `window(...)` + `withWatermark(...)` sobre campo temporal consistente.
 2. **`checkpointLocation` distinto** por cada query de streaming.
-3. Comparación CPU vs GPU: **misma versión PySpark**, mismos datos (mismo replay), mismos parámetros; solo cambian `spark-cpu.conf` / `spark-gpu.conf` y jars RAPIDS.
+3. Comparación CPU vs GPU: mismos datos (mismo replay) y mismos parámetros de negocio; cambian `spark-cpu.conf` / `spark-gpu.conf` y jars RAPIDS. En este repo el pin GPU usa **PySpark 3.5.2** + **rapids-4-spark 24.10.1** y el pin CPU **3.5.4** (documentado en `CLAUDE.md`).
 4. Métricas a documentar bajo `reports/…`: Input Rate, Processing Rate, Batch Duration (p95), cola de batches, Shuffle Read/Write, GC Time, Scheduler Delay, Spill, etc.
 
 ---

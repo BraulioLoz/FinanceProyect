@@ -1,6 +1,16 @@
 # spark/ — Procesamiento Spark Structured Streaming
 
-Módulo de procesamiento: streaming online, entrenamiento batch y scoring en tiempo real. Toda la lógica usa **PySpark 3.5.x**.
+Módulo de procesamiento: streaming online, entrenamiento batch y scoring en tiempo real. La línea CPU/streaming usa **PySpark 3.5.4**; los jobs con **RAPIDS** en GPU usan **PySpark 3.5.2** y `rapids-4-spark_2.12-24.10.1.jar` (ver `CLAUDE.md` → Versiones pin).
+
+---
+
+## Benchmark CPU vs GPU (Parquet)
+
+| Script | Rol |
+|--------|-----|
+| `spark/jobs/gen_synth_parquet.py` | Genera una vez `~/data/crypto/synth.parquet` (modo CPU). |
+| `spark/jobs/gpu_smoke_test.py` | Lee Parquet y ejecuta agregaciones; mismo código para CPU (`run_spark_cpu.sh`) y GPU (`run_spark_gpu.sh`). |
+| `spark/replayer/inflate_features.py` | Infla features reales para pruebas de escala con `batch_aggregate.py`. |
 
 ---
 
