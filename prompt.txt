@@ -1,0 +1,13 @@
+
+  Opción A (recomendado): Downgrade temporal de PySpark a 3.5.2
+  
+  PySpark 3.5.2 → 3.5.4 son cambios menores (parches), tu código funciona igual. Es reversible.
+
+  pip install pyspark==3.5.2 --user
+  python -c "import pyspark; print(pyspark.__version__)"
+
+  Luego corre de nuevo:
+  cd /mnt/c/Users/braul/ItamProgramming/Arqui/FinanceProyect
+  bash infra/scripts/run_spark_gpu.sh spark/jobs/gpu_smoke_test.py
+
+  Cuando termines puedes restaurar con pip install pyspark==3.5.4 --user.
