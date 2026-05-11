@@ -54,7 +54,7 @@ WebSocket (Binance)          Kafka KRaft (Docker)         Spark Structured Strea
 | Fuente de datos | Binance USDS-Margined Futures WebSocket |
 | ML | Spark MLlib — RandomForestClassifier |
 | Almacenamiento | Apache Parquet (local) |
-| Visualizacion | Power BI Desktop (Windows via `\\wsl$`) |
+| Dashboard | Streamlit + Plotly (indicadores en tiempo real) |
 
 ---
 
@@ -77,6 +77,9 @@ FinanceProyect/
 ├── infra/
 │   ├── docker-compose.kafka.yml
 │   └── scripts/             # run_spark_cpu.sh, run_spark_gpu.sh
+├── dashboard/
+│   ├── app.py               # Dashboard Streamlit (indicadores TR)
+│   └── requirements.txt
 ├── reports/                 # Reporte comparativo + capturas Spark UI
 ├── colab_benchmark.ipynb    # Notebook Colab (benchmark GPU T4)
 ├── colab_benchmark.html     # Notebook exportado con resultados
@@ -105,6 +108,33 @@ FinanceProyect/
 | AUC-ROC | 0.52 |
 
 > Accuracy cercana al 50% es esperada: datos sinteticos con ruido determinista y mercados eficientes donde la prediccion a corto plazo es fundamentalmente dificil.
+
+---
+
+## Dashboard de Indicadores en Tiempo Real
+
+Dashboard interactivo (Streamlit + Plotly) que visualiza los indicadores estadisticos del trafico de criptoactivos calculados por el pipeline Spark.
+
+**Paneles incluidos:**
+
+| Panel | Indicador | Descripcion |
+|-------|-----------|-------------|
+| 1 | VWAP | Precio promedio ponderado por volumen (linea temporal) |
+| 2 | Volatilidad | Desviacion estandar del precio por ventana |
+| 3 | Volumen / Trades | Volumen total y numero de transacciones por simbolo |
+| 4 | Spread Bid-Ask | Proxy de liquidez (mejor ask - mejor bid) |
+| 5 | Correlacion BTC | Correlacion Pearson de VWAP vs BTCUSDT por par |
+| 6 | Estadisticas | Media, stddev, percentiles (P25/P50/P75) por simbolo |
+
+**Ejecutar:**
+
+```bash
+cd dashboard
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+El dashboard se abre en `http://localhost:8501`. Lee los Parquet generados por Spark (`~/data/crypto/features/`). Si no hay datos disponibles, muestra datos sinteticos de demostracion. Incluye auto-refresh cada 30 segundos para actualizacion en vivo.
 
 ---
 
@@ -152,6 +182,7 @@ bash infra/scripts/run_spark_cpu.sh spark/jobs/gpu_smoke_test.py
 - Docker (para Kafka KRaft)
 - CUDA 12.x (solo si se intenta GPU local)
 - Google Colab con GPU T4 (para benchmark GPU)
+- Streamlit + Plotly (para dashboard — ver `dashboard/requirements.txt`)
 
 ---
 
