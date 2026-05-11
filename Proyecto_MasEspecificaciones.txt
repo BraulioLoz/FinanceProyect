@@ -1,0 +1,28 @@
+Calificación del proyecto y AWS
+Buen día a todos,
+
+En primer lugar, tienen hasta el domingo de esta semana para finalizar los módulos de los dos últimos cursos con la cantidad de autoevaluaciones y laboratorios indicados en la página web.
+
+Por otro lado, si alguien quiere calificar en la mañana, por favor, me puede enviar un correo a wilmer.pereira@itam.mx. En caso contrario, revisaré los proyectos en la hora de la clase al final de la tarde.
+
+Las calificaciones se las haré llegar la próxima semana de las dos tareas, preinforme del proyecto y autoevaluaciones de AWS y laboratorios. No olviden de hacer capturas de pantallas de los laboratorios de Data Engineeering
+
+Por último, como acordamos la semana pasada, hoy es la revisión del proyecto al que luego se le hará una pequeña modificación para el examen final. La rúbrica sigue los lineamientos planteados en el enunciado y es la siguiente:
+
+0. Origen y tipo del flujo de datos (simulado o en TR) 
+
+1. Dos arquitecturas diferentes con su descripción y comparar con UI Spark con al  menos dós métricas.  (3 ptos)
+    1.1. Tiempo de ejecución
+    1.2. Tiempo de shuffle entre cada stage
+    1.3. Operaciones I/O en cada stage
+    1.4. Scheduler delay (retraso por recursos)
+    1.5. Spill (descarga a disco)
+    1.6. Streaming (rates: input, processing, batch duration, colas, ...)
+    
+2. Indicadores del tráfico en tiempo real (estadística y/o clustering) usar Qlink, powerBI, tableau, ... (2 ptos)
+    
+3. Entrenamiento de un modelo con el batch de lo capturado. No es necesario que esté depurado pero si deben mostrar las métricas de desempeño  (1.5 ptos)
+
+4. Predicción de nuevos datos después del entrenamiento (1 pto)
+
+5. Pipeline funcionando completo: captura en tiempo real y predicción después de tener el modelo también en tiempo real (2.5 ptos)
